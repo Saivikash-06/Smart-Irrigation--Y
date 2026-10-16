@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "author": "GreenPulse IoT Team",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-devkit-c-v4",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "pot",
+      "top": -90,
+      "left": -120,
+      "attrs": {
+        "label": "Soil Moisture Simulator"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r1",
+      "top": 90,
+      "left": 140,
+      "attrs": {
+        "resistance": "220"
+      }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led",
+      "top": 60,
+      "left": 200,
+      "attrs": {
+        "color": "green",
+        "label": "Water Pump"
+      }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn",
+      "top": -70,
+      "left": 120,
+      "attrs": {
+        "color": "blue",
+        "label": "Manual Watering"
+      }
+    }
+  ],
+  "connections": [
+    [ "pot:GND", "esp:GND.1", "black", [ "v20", "h100" ] ],
+    [ "pot:SIG", "esp:34", "green", [ "v40", "h60" ] ],
+    [ "pot:VCC", "esp:3V3", "red", [ "v-20", "h80" ] ],
+    [ "esp:26", "r1:1", "orange", [ "v0" ] ],
+    [ "r1:2", "led:A", "orange", [ "v0" ] ],
+    [ "led:C", "esp:GND.2", "black", [ "v30", "h-80" ] ],
+    [ "btn:1.l", "esp:27", "blue", [ "v0" ] ],
+    [ "btn:2.l", "esp:GND.1", "black", [ "v0" ] ]
+  ],
+  "dependencies": {}
+}

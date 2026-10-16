@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GreenPulse – Smart Irrigation & Garden Monitoring System</title>
+  <meta name="description" content="IoT Smart Irrigation and Garden Monitoring System using ESP32, MicroPython, Wokwi, and FastAPI dashboard.">
+
+  <!-- Google Fonts & Chart.js -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="app-container">
+
+    <!-- ========================================================================
+         SIDEBAR NAVIGATION
+         ======================================================================== -->
+    <aside class="sidebar">
+      <div class="brand-header">
+        <div class="brand-icon">🌱</div>
+        <div>
+          <div class="brand-name">GreenPulse</div>
+          <div class="brand-tag">IoT Smart Irrigation</div>
+        </div>
+      </div>
+
+      <ul class="nav-links">
+        <li class="nav-item active">
+          <button data-tab="overview">
+            <span class="nav-icon">📊</span>
+            <span>Overview</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button data-tab="monitoring">
+            <span class="nav-icon">💧</span>
+            <span>Soil Monitoring</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button data-tab="irrigation">
+            <span class="nav-icon">⚙️</span>
+            <span>Irrigation Control</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button data-tab="history">
+            <span class="nav-icon">📜</span>
+            <span>Watering History</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button data-tab="plants">
+            <span class="nav-icon">🌿</span>
+            <span>Plant Management</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button data-tab="alerts">
+            <span class="nav-icon">🔔</span>
+            <span>Alerts & Logs</span>
+          </button>
+        </li>
+        <li class="nav-item">
+          <button data-tab="settings">
+            <span class="nav-icon">🛠️</span>
+            <span>Settings</span>
+          </button>
+        </li>
+      </ul>
+
+      <div class="sidebar-footer">
+        <div class="device-badge-mini">
+          <span>ESP32 Node-01</span>
+          <div>
+            <span class="pulse-dot" id="sidebarPulseDot"></span>
+            <span id="sidebarStatusText" style="color:#94a3b8;">Syncing...</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ========================================================================
+         MAIN APPLICATION AREA
+         ======================================================================== -->
+    <div class="main-wrapper">
+
+      <!-- Top Header -->
+      <header class="top-header">
+        <div style="display:flex; align-items:center; gap:14px;">
+          <button class="btn-mobile-menu" id="mobileMenuToggle" aria-label="Toggle navigation menu">☰</button>
+          <div class="header-title-block">
+            <h1>GreenPulse Station</h1>
+            <div class="header-subtitle" id="lastSensorUpdateText">Waiting for telemetry...</div>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <!-- Demo Mode Switch -->
+          <label class="demo-toggle-pill" title="Toggle Demo Simulator to test system without physical hardware">
+            <input type="checkbox" id="demoModeToggle" style="accent-color: var(--primary-600); cursor:pointer;">
+            <span>Demo Mode</span>
+          </label>
+
+          <!-- Connection Status Chip -->
+          <div class="status-chip offline" id="deviceStatusChip">
+            <span class="pulse-dot"></span>
+            <span>Connecting...</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Offline Notice Banner -->
+      <div class="offline-banner" id="offlineNoticeBanner">
+        <span>⚠️</span>
+        <span id="offlineBannerText">Device offline – displaying the last available reading.</span>
+      </div>
+
+      <!-- Demo Simulator Controls Banner -->
+      <div class="demo-banner" id="demoBanner" style="display:none;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span>🧪 <strong>Demo Mode Active:</strong> Injecting simulated telemetry for testing.</span>
+        </div>
+        <div class="demo-scenarios-bar">
+          <span style="font-size:11.5px; font-weight:600;">Test Scenarios:</span>
+          <button class="btn-scenario" data-scenario="1">Sc.1 (60% Ideal)</button>
+          <button class="btn-scenario" data-scenario="2">Sc.2 (&lt;30% Auto Water)</button>
+          <button class="btn-scenario" data-scenario="3">Sc.3 (&gt;35% Auto Stop)</button>
+          <button class="btn-scenario" data-scenario="5">Sc.5 (Emergency Stop)</button>
+          <button class="btn-scenario" data-scenario="6">Sc.6 (Device Offline)</button>
+          <button class="btn-scenario" data-scenario="7">Sc.7 (Sensor Fault)</button>
+        </div>
+      </div>
+
+      <!-- Emergency Active Notice -->
+      <div id="emergencyActiveNotice" style="display:none; background:#fee2e2; border-bottom:2px solid #dc2626; padding:12px 32px; color:#991b1b; font-weight:700;">
+        🚨 EMERGENCY STOP IS ENGAGED: Irrigation pump locked OFF. Go to Settings or Irrigation Control to reset.
+      </div>
+
+      <!-- Page Content Views -->
+      <main class="page-content">
+
+        <!-- ====================================================================
+             TAB 1: OVERVIEW
+             ==================================================================== -->
+        <section class="page-section active" id="section-overview">
+          <!-- Metrics Grid -->
+          <div class="metrics-grid">
+            <!-- Soil Moisture Card -->
+            <div class="card">
+              <div class="stat-header">
+                <span class="stat-label">Soil Moisture</span>
+                <div class="stat-icon green">💧</div>
+              </div>
+              <div class="stat-value" id="metricMoistureVal">0.0%</div>
+              <div class="stat-subtext">
+                <span class="condition-pill optimal" id="conditionPill">OPTIMAL</span>
+                <span id="metricRawAdcVal" style="color:var(--text-light); font-size:11px;">ADC: 4095</span>
+              </div>
+            </div>
+
+            <!-- Pump Status Card -->
+            <div class="card">
+              <div class="stat-header">
+                <span class="stat-label">Irrigation Pump</span>
+                <div class="stat-icon blue">⚡</div>
+              </div>
+              <div class="stat-value" id="metricPumpVal">OFF</div>
+              <div class="stat-subtext">
+                <span class="pump-status-badge off" id="pumpStateBadge">PUMP IDLE</span>
+              </div>
+            </div>
+
+            <!-- Irrigation Mode Card -->
+            <div class="card">
+              <div class="stat-header">
+                <span class="stat-label">Operating Mode</span>
+                <div class="stat-icon amber">🎛️</div>
+              </div>
+              <div class="stat-value" id="metricModeVal">AUTO</div>
+              <div class="stat-subtext">
+                <span>Threshold: 30% moisture</span>
+              </div>
+            </div>
+
+            <!-- Total Water Consumption Card -->
+            <div class="card">
+              <div class="stat-header">
+                <span class="stat-label">Est. Water Used</span>
+                <div class="stat-icon purple">🚿</div>
+              </div>
+              <div class="stat-value" id="metricWaterVal">0.0 L</div>
+              <div class="stat-subtext">
+                <span id="metricEventsVal">0</span> watering cycles recorded
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Chart & Quick Control Row -->
+          <div class="dashboard-row">
+            <!-- Live Soil Moisture Graph -->
+            <div class="card chart-card">
+              <div class="card-header-bar">
+                <div>
+                  <h2 class="card-title">Live Soil Moisture Trend</h2>
+                  <p style="font-size:12.5px; color:var(--text-muted); margin-top:2px;">Real-time capacitive ADC reading vs. configured 30% irrigation trigger</p>
+                </div>
+                <div style="font-size:12px; color:var(--text-muted);">WebSocket Stream Active</div>
+              </div>
+              <div class="chart-container">
+                <canvas id="moistureTrendChart"></canvas>
+              </div>
+            </div>
+
+            <!-- Quick Control Actions -->
+            <div class="card">
+              <div class="card-header-bar">
+                <h2 class="card-title">Irrigation Controls</h2>
+              </div>
+              <p style="font-size:12.5px; color:var(--text-muted); margin-bottom:16px;">
+                Direct manual overrides with hardware safety lock.
+              </p>
+
+              <div class="control-buttons-stack">
+                <button class="btn btn-primary" id="btnStartWatering">
+                  <span>▶️</span> Start Watering (10s)
+                </button>
+                <button class="btn btn-secondary" id="btnStopWatering" disabled>
+                  <span>⏹️</span> Stop Pump
+                </button>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                  <button class="btn btn-secondary" id="btnSetAutoMode" style="font-size:12px;">Auto Mode</button>
+                  <button class="btn btn-secondary" id="btnSetManualMode" style="font-size:12px;">Manual Mode</button>
+                </div>
+                <hr style="border:none; border-top:1px solid var(--border-subtle); margin:4px 0;">
+                <button class="btn btn-danger" id="btnEmergencyStop">
+                  <span>🚨</span> EMERGENCY STOP
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Activity & Active Alerts Table -->
+          <div class="dashboard-row">
+            <div class="card">
+              <div class="card-header-bar">
+                <h2 class="card-title">Recent Watering Activity</h2>
+                <button class="btn btn-secondary" style="padding:6px 12px; font-size:12px;" onclick="window.api.loadWateringHistory()">View All</button>
+              </div>
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Event ID</th>
+                      <th>Time</th>
+                      <th>Mode</th>
+                      <th>Moisture Before/After</th>
+                      <th>Est. Water</th>
+                    </tr>
+                  </thead>
+                  <tbody id="recentActivityTableBody">
+                    <tr><td colspan="5" style="text-align:center; padding:24px; color:var(--text-muted);">Loading recent activity...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header-bar">
+                <h2 class="card-title">Active Alerts</h2>
+              </div>
+              <div id="activeAlertsList">
+                <div style="text-align:center; padding:20px; color:var(--text-muted); font-size:13px;">Checking system alerts...</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             TAB 2: SOIL MONITORING
+             ==================================================================== -->
+        <section class="page-section" id="section-monitoring">
+          <div class="calibration-box">
+            <h2 style="font-size:20px; margin-bottom:6px;">Soil Moisture Calibration & Sensor Visualizer</h2>
+            <p style="font-size:13px; color:var(--text-muted);">
+              <strong>Hardware Simulation Note:</strong> In the Wokwi circuit, a rotary potentiometer connected to ESP32 GPIO 34 simulates an analog capacitive soil moisture probe. The ESP32 12-bit ADC converts voltages between 0V and 3.3V into digital integers (0–4095).
+            </p>
+
+            <div class="meter-bar-outer">
+              <div class="meter-bar-fill" id="soilMeterFill" style="width: 30%;"></div>
+              <div class="meter-threshold-marker" id="soilMeterThresholdMarker" style="left: 30%;" title="Irrigation Threshold"></div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted); font-weight:600;">
+              <span>0% (Dry Soil / 4095 ADC)</span>
+              <span>30% Threshold</span>
+              <span>100% (Saturated / 1500 ADC)</span>
+            </div>
+          </div>
+
+          <h3 style="font-size:17px; margin-bottom:14px;">Soil Moisture Classification Standards</h3>
+          <div class="ranges-grid">
+            <div class="range-card dry">
+              <div style="font-weight:700; color:#ef4444; font-size:14px; margin-bottom:4px;">0% – 29%: DRY</div>
+              <p style="font-size:12.5px; color:#475569;">Critically low soil moisture. Irrigation pump activates automatically if system is in Auto Mode.</p>
+            </div>
+            <div class="range-card acceptable">
+              <div style="font-weight:700; color:#f59e0b; font-size:14px; margin-bottom:4px;">30% – 44%: ACCEPTABLE</div>
+              <p style="font-size:12.5px; color:#475569;">Moisture is adequate but declining. Soil should be continuously monitored.</p>
+            </div>
+            <div class="range-card comfortable">
+              <div style="font-weight:700; color:#22c55e; font-size:14px; margin-bottom:4px;">45% – 75%: COMFORTABLE</div>
+              <p style="font-size:12.5px; color:#475569;">Optimal root hydration zone for demonstration plants. Promotes healthy root respiration without saturation.</p>
+            </div>
+            <div class="range-card high">
+              <div style="font-weight:700; color:#3b82f6; font-size:14px; margin-bottom:4px;">76% – 100%: HIGH MOISTURE</div>
+              <p style="font-size:12.5px; color:#475569;">Soil is saturated. Check plant drainage to prevent root rot or fungal growth.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             TAB 3: IRRIGATION CONTROL
+             ==================================================================== -->
+        <section class="page-section" id="section-irrigation">
+          <div class="card" style="margin-bottom:24px;">
+            <h2 class="card-title" style="margin-bottom:8px;">Irrigation Station Status</h2>
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom:20px;">
+              The Green LED on ESP32 GPIO 26 represents the irrigation water pump. The physical Blue pushbutton on GPIO 27 allows on-site manual toggling.
+            </p>
+
+            <div style="display:flex; align-items:center; gap:24px; padding:20px; background:#f8fafc; border-radius:var(--radius-md); border:1px solid var(--border-subtle); margin-bottom:24px;">
+              <div style="font-size:42px;">💧</div>
+              <div>
+                <div style="font-size:14px; color:var(--text-muted); font-weight:600;">ACTIVE STATE</div>
+                <div id="conditionDesc" style="font-size:18px; font-weight:700; color:var(--text-main);">Pump is currently standby.</div>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:16px;">
+              <button class="btn btn-primary" onclick="window.api.sendCommand('START', 10)">
+                ▶️ Start Manual Watering (10s)
+              </button>
+              <button class="btn btn-secondary" onclick="window.api.sendCommand('STOP')">
+                ⏹️ Stop Pump Immediately
+              </button>
+              <button class="btn btn-secondary" onclick="window.api.sendCommand('SET_MODE_AUTO')">
+                🤖 Switch to Automatic Mode
+              </button>
+              <button class="btn btn-secondary" onclick="window.api.sendCommand('SET_MODE_MANUAL')">
+                ✋ Switch to Manual Mode
+              </button>
+            </div>
+          </div>
+
+          <div class="card" style="border:1px solid #fecdd3; background:#fff1f2;">
+            <h2 class="card-title" style="color:#991b1b; margin-bottom:6px;">Emergency Stop & Hardware Protection</h2>
+            <p style="font-size:13px; color:#7f1d1d; margin-bottom:16px;">
+              Engaging the emergency stop immediately halts the pump, cancels all pending operations, and locks automatic watering until manually reset.
+            </p>
+            <button class="btn btn-danger" onclick="window.api.sendCommand('EMERGENCY_STOP')">
+              🚨 TRIGGER EMERGENCY STOP NOW
+            </button>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             TAB 4: WATERING HISTORY
+             ==================================================================== -->
+        <section class="page-section" id="section-history">
+          <div class="card">
+            <div class="card-header-bar">
+              <div>
+                <h2 class="card-title">Irrigation Event History</h2>
+                <div style="font-size:12.5px; color:var(--text-muted); margin-top:4px;">
+                  <span id="historyTotalCountText">Total Events: 0</span> •
+                  <span id="historyTotalWaterText">Total Water: 0.0 Liters</span>
+                </div>
+              </div>
+              <div style="display:flex; gap:12px;">
+                <select id="historyModeFilter" class="form-control" style="width:140px; padding:6px 10px; font-size:12.5px;">
+                  <option value="">All Modes</option>
+                  <option value="AUTO">Auto Mode</option>
+                  <option value="MANUAL">Manual Mode</option>
+                </select>
+                <button class="btn btn-primary" id="btnExportCsv" style="padding:6px 14px; font-size:12.5px;">
+                  📥 Download CSV
+                </button>
+              </div>
+            </div>
+
+            <p style="font-size:12px; color:var(--text-muted); margin-bottom:16px; background:#f8fafc; padding:8px 12px; border-radius:var(--radius-sm);">
+              ℹ️ <strong>Water Consumption Calculation Note:</strong> Estimated water consumption is calculated from pump run duration (~1.2 Liters/minute) because the demonstration circuit does not have a physical flow meter.
+            </p>
+
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Start Time</th>
+                    <th>End Time</th>
+                    <th>Mode</th>
+                    <th>Moisture Before/After</th>
+                    <th>Status</th>
+                    <th>Est. Water</th>
+                  </tr>
+                </thead>
+                <tbody id="historyFullTableBody">
+                  <tr><td colspan="7" style="text-align:center; padding:24px;">Loading history...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             TAB 5: PLANT MANAGEMENT
+             ==================================================================== -->
+        <section class="page-section" id="section-plants">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <div>
+              <h2 style="font-size:22px; font-weight:700;">Garden Plant Collection</h2>
+              <p style="font-size:13px; color:var(--text-muted);">
+                Configure customized moisture thresholds and care guidelines per plant species.
+              </p>
+            </div>
+            <button class="btn btn-primary" id="btnOpenAddPlantModal">
+              ➕ Add New Plant
+            </button>
+          </div>
+
+          <div class="plants-grid" id="plantsGridContainer">
+            <!-- Plant cards populated dynamically -->
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             TAB 6: ALERTS & LOGS
+             ==================================================================== -->
+        <section class="page-section" id="section-alerts">
+          <div class="card">
+            <div class="card-header-bar">
+              <h2 class="card-title">System Alerts & Fault History</h2>
+              <button class="btn btn-secondary" onclick="window.location.reload()" style="padding:6px 12px; font-size:12px;">Refresh</button>
+            </div>
+            <div id="allAlertsList">
+              <div style="text-align:center; padding:24px; color:var(--text-muted);">Loading alert log...</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ====================================================================
+             TAB 7: SETTINGS
+             ==================================================================== -->
+        <section class="page-section" id="section-settings">
+          <div class="card" style="max-width:760px;">
+            <h2 class="card-title" style="margin-bottom:6px;">System Configuration & Hardware Calibration</h2>
+            <p style="font-size:13px; color:var(--text-muted); margin-bottom:24px;">
+              Manage irrigation thresholds, timing safety limits, and ADC potentiometer calibration.
+            </p>
+
+            <form id="settingsForm">
+              <div class="form-group">
+                <label class="form-label">Station / Device Name</label>
+                <input type="text" id="settingDeviceName" class="form-control" required>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                <div class="form-group">
+                  <label class="form-label">Irrigation Moisture Threshold (%)</label>
+                  <input type="number" id="settingThreshold" class="form-control" min="5" max="95" step="1" required>
+                  <small style="color:var(--text-muted); font-size:11.5px;">Auto watering begins below this moisture percentage (default: 30%).</small>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Watering Duration (seconds)</label>
+                  <input type="number" id="settingDuration" class="form-control" min="2" max="120" required>
+                  <small style="color:var(--text-muted); font-size:11.5px;">Standard cycle run time (default: 10s).</small>
+                </div>
+              </div>
+
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                <div class="form-group">
+                  <label class="form-label">Minimum Cycle Interval (seconds)</label>
+                  <input type="number" id="settingInterval" class="form-control" min="10" max="3600" required>
+                  <small style="color:var(--text-muted); font-size:11.5px;">Minimum time between auto watering cycles to prevent waterlogging.</small>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Maximum Safety Duration (seconds)</label>
+                  <input type="number" id="settingMaxDuration" class="form-control" min="5" max="300" required>
+                  <small style="color:var(--text-muted); font-size:11.5px;">Hard hardware safety cutoff duration (default: 30s).</small>
+                </div>
+              </div>
+
+              <h4 style="font-size:15px; margin:20px 0 12px; color:var(--text-main);">Potentiometer ADC Calibration</h4>
+              <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+                <div class="form-group">
+                  <label class="form-label">Dry Soil ADC Value (0% Moisture)</label>
+                  <input type="number" id="settingDryAdc" class="form-control" min="2000" max="4095" required>
+                  <small style="color:var(--text-muted); font-size:11.5px;">ADC reading when soil is completely dry (typically ~4095).</small>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Wet Soil ADC Value (100% Moisture)</label>
+                  <input type="number" id="settingWetAdc" class="form-control" min="0" max="3000" required>
+                  <small style="color:var(--text-muted); font-size:11.5px;">ADC reading when soil is fully saturated (typically ~1500).</small>
+                </div>
+              </div>
+
+              <div class="form-group" style="display:flex; align-items:center; gap:10px; margin-top:8px;">
+                <input type="checkbox" id="settingAutoMode" style="width:18px; height:18px; accent-color:var(--primary-600);">
+                <label for="settingAutoMode" style="font-size:14px; font-weight:600; cursor:pointer;">
+                  Enable Automatic Irrigation Mode
+                </label>
+              </div>
+
+              <div style="margin-top:24px;">
+                <button type="submit" class="btn btn-primary" style="padding:12px 28px;">
+                  💾 Save Configuration Settings
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       MODAL: ADD NEW PLANT
+       ========================================================================== -->
+  <div class="modal-overlay" id="plantModalOverlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 style="font-size:18px; font-weight:700;">Add Plant to Collection</h3>
+        <button class="modal-close" id="btnClosePlantModal">&times;</button>
+      </div>
+
+      <form id="addPlantForm">
+        <div class="form-group">
+          <label class="form-label">Plant Common Name *</label>
+          <input type="text" id="plantNameInput" class="form-control" placeholder="e.g. Cherry Tomato" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Botanical / Species Name</label>
+          <input type="text" id="plantTypeInput" class="form-control" placeholder="e.g. Solanum lycopersicum" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Garden Location</label>
+          <input type="text" id="plantLocationInput" class="form-control" placeholder="e.g. South Garden Bed #2" required>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
+          <div class="form-group">
+            <label class="form-label">Min Moisture (%)</label>
+            <input type="number" id="plantMinMoistureInput" class="form-control" value="45" min="0" max="100" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Max Moisture (%)</label>
+            <input type="number" id="plantMaxMoistureInput" class="form-control" value="75" min="0" max="100" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Target Irrigation Threshold (%)</label>
+          <input type="number" id="plantThresholdInput" class="form-control" value="30" min="5" max="95" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Care Notes & Guidelines</label>
+          <textarea id="plantNotesInput" class="form-control" rows="3" placeholder="Sun requirements, soil aeration, drainage notes..."></textarea>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:20px;">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('plantModalOverlay').classList.remove('active')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Plant</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Application Scripts -->
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/charts.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
